@@ -89,32 +89,38 @@ touchscreen:
       mirror_y: true
 
 # --- Import timer sensor from Home Assistant ---
-text_sensor:
+sensor:
   - platform: homeassistant
     id: gaming_pc_timer
     entity_id: sensor.gaming_pc_2_on_time
     on_value:
       then:
+        # Format decimal hours (e.g. 1.5) as H:MM:SS for display
         - lvgl.label.update:
             id: timer_value
-            text: !lambda 'return x;'
+            text: !lambda |-
+              if (std::isnan(x)) return std::string("--:--:--");
+              int total_seconds = (int)(x * 3600.0f);
+              if (total_seconds < 0) total_seconds = 0;
+              int hours = total_seconds / 3600;
+              int minutes = (total_seconds % 3600) / 60;
+              int seconds = total_seconds % 60;
+              char buf[16];
+              snprintf(buf, sizeof(buf), "%d:%02d:%02d", hours, minutes, seconds);
+              return std::string(buf);
+            text_color: !lambda |-
+              // Turn red when over 2 hours
+              if (x > 2.0f) return lv_color_hex(0xFF4444);
+              return lv_color_hex(0xE0E0FF);
+        # Map 0–2 hours to 0–100% arc, capped at 100%
         - lvgl.arc.update:
             id: timer_arc
             value: !lambda |-
-              // Parse "H:MM:SS" or "HH:MM:SS" timer string to get remaining seconds
-              // and map to arc percentage (0-100)
-              std::string val = x;
-              if (val.empty() || val == "unavailable" || val == "unknown") return 0;
-              int hours = 0, minutes = 0, seconds = 0;
-              if (sscanf(val.c_str(), "%d:%d:%d", &hours, &minutes, &seconds) >= 2) {
-                int total_seconds = hours * 3600 + minutes * 60 + seconds;
-                // Cap at 2 hours (7200s) for the arc visual
-                int max_seconds = 7200;
-                int pct = (total_seconds * 100) / max_seconds;
-                if (pct > 100) pct = 100;
-                return pct;
-              }
-              return 0;
+              if (std::isnan(x)) return 0;
+              int pct = (int)((x / 2.0f) * 100.0f);
+              if (pct < 0) pct = 0;
+              if (pct > 100) pct = 100;
+              return pct;
 
 # --- LVGL UI ---
 lvgl:
@@ -165,5 +171,3 @@ lvgl:
             text: "On Time"
             text_color: 0x5555AA
             text_font: montserrat_14
-
-# The current value for sensor.gaming_pc_2_on_time is showing --:--:-- The value of this sensor starts at 0 and has a maximum of 2 hours.  When the value is greater than 2 hours, the value should still be displayed but should be colored red. The HomeAssistant Config for sensor.gaming_pc_2_on_time is that the State class = Measurement, the Unit of measurement = h and the Device class = duration
