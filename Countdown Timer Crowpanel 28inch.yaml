@@ -108,10 +108,18 @@ sensor:
               char buf[16];
               snprintf(buf, sizeof(buf), "%d:%02d:%02d", hours, minutes, seconds);
               return std::string(buf);
-            text_color: !lambda |-
-              // Turn red when over 2 hours
-              if (x > 2.0f) return lv_color_hex(0xFF4444);
-              return lv_color_hex(0xE0E0FF);
+        # Turn text red when over 2 hours, otherwise default color
+        - if:
+            condition:
+              lambda: 'return x > 2.0f;'
+            then:
+              - lvgl.label.update:
+                  id: timer_value
+                  text_color: 0xFF4444
+            else:
+              - lvgl.label.update:
+                  id: timer_value
+                  text_color: 0xE0E0FF
         # Map 0–2 hours to 0–100% arc, capped at 100%
         - lvgl.arc.update:
             id: timer_arc

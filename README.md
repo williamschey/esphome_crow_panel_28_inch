@@ -18,7 +18,7 @@ The panel connects to Home Assistant and subscribes to the sensor **`sensor.gami
 
 1. **Displays the elapsed time** as `H:MM:SS` on a large centered label using the LVGL graphics library.
 2. **Fills an arc gauge** proportionally — 0 hours maps to 0 % and 2 hours maps to 100 %.
-3. **Turns the timer text red** when the value exceeds 2 hours, giving a clear visual alert that the time limit has been passed.
+3. **Turns the timer text red** (`#FF4444`) when the value exceeds 2 hours, giving a clear visual alert that the time limit has been passed. Otherwise the text stays the default light blue (`#E0E0FF`).
 
 ### UI Layout
 
