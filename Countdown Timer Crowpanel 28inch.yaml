@@ -59,7 +59,7 @@ display:
     spi_id: spi_bus
     cs_pin: GPIO15
     dc_pin: GPIO2
-    color_order: RGB
+    color_order: BGR
     dimensions:
       width: 320
       height: 240
@@ -94,9 +94,6 @@ globals:
   - id: last_hours
     type: float
     initial_value: '-1.0'
-  - id: last_update_ms
-    type: uint32_t
-    initial_value: '0'
   - id: flash_on
     type: bool
     initial_value: 'false'
@@ -114,9 +111,6 @@ sensor:
         - globals.set:
             id: last_hours
             value: !lambda 'return x;'
-        - globals.set:
-            id: last_update_ms
-            value: !lambda 'return millis();'
 
 # --- Update display every 500ms (gives ~1s flash cycle) ---
 interval:
@@ -126,14 +120,10 @@ interval:
       - globals.set:
           id: flash_on
           value: !lambda 'return !id(flash_on);'
-      # Compute current hours by interpolating from last HA update
+      # Use the last value received from Home Assistant
       - globals.set:
           id: current_hours
-          value: !lambda |-
-            float base = id(last_hours);
-            if (base < 0.0f) return -1.0f;
-            uint32_t elapsed_ms = millis() - id(last_update_ms);
-            return base + (elapsed_ms / 3600000.0f);
+          value: !lambda 'return id(last_hours);'
       # Update timer text (H:MM:SS)
       - lvgl.label.update:
           id: timer_value
