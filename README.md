@@ -66,20 +66,69 @@ The state is a **decimal number of hours** (e.g. `0.0`, `0.5`, `1.75`).
 
 ## Getting Started
 
-1. Copy the YAML file into your ESPHome configuration directory.
-2. Create or update your `secrets.yaml` with the required values:
-   ```yaml
-   api_key: "<your_encryption_key>"
-   ota_password: "<your_ota_password>"
-   wifi_ssid: "<your_wifi_ssid>"
-   wifi_password: "<your_wifi_password>"
-   ```
-3. Make sure `sensor.gaming_pc_2_on_time` exists in Home Assistant (or change the `entity_id` in the YAML to match your own duration sensor).
-4. Compile and flash:
-   ```bash
-   esphome run "Countdown Timer Crowpanel 28inch.yaml"
-   ```
+### 1. Configure secrets
 
-## License
+Create or update your `secrets.yaml` in the ESPHome configuration directory:
 
-See [LICENSE](LICENSE) for details.
+```yaml
+ota_password: "<your_ota_password>"
+wifi_ssid: "<your_wifi_ssid>"
+wifi_password: "<your_wifi_password>"
+```
+
+### 2. (Optional) Enable API encryption
+
+The default configuration runs **without** API encryption. If you want encrypted communication between Home Assistant and the device, generate a random base64-encoded 32-byte key:
+
+```bash
+# Using OpenSSL
+openssl rand -base64 32
+
+# Or using Python
+python3 -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+```
+
+Then add the key to your `secrets.yaml`:
+
+```yaml
+api_key: "<paste_generated_key_here>"
+```
+
+And update the `api:` section in the YAML config:
+
+```yaml
+api:
+  encryption:
+    key: !secret api_key
+```
+
+> **Important:** If you add or change the encryption key after the device has already been adopted in Home Assistant, you will need to re-add the device with the new key.
+
+### 3. Verify the Home Assistant sensor
+
+Make sure `sensor.gaming_pc_2_on_time` exists in Home Assistant (or change the `entity_id` in the YAML to match your own duration sensor). You can verify this under **Developer Tools → States**.
+
+### 4. Compile and flash
+
+```bash
+esphome run "Countdown Timer Crowpanel 28inch.yaml"
+```
+
+### 5. Add the device to Home Assistant
+
+After flashing, the device needs to be **adopted into the ESPHome integration** in Home Assistant before it can receive sensor states. Without this step, the display will show `--:--:--` because the API connection is never established.
+
+1. In Home Assistant, go to **Settings → Devices & Services**.
+2. The device should appear automatically under **Discovered**. Click **Configure**, then **Submit**.
+3. If it does not auto-discover, click **+ Add Integration → ESPHome** and enter the device's IP address or hostname (`countdown_timer_crowpanel.local`).
+4. If you configured API encryption, you will be prompted to enter the encryption key.
+5. Once connected, you should see `Home Assistant connected!` in the ESPHome device logs, and the display will begin showing the timer value.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Display shows `--:--:--` | Home Assistant is not connected to the device | Follow step 5 above to add the device |
+| Device not discovered in HA | Network/mDNS issue | Add manually by IP address |
+| HA fails to connect | API encryption mismatch | Ensure the key in `secrets.yaml` matches what HA expects, or remove encryption from both sides |
+| Timer value doesn't update | Entity ID mismatch | Verify `sensor.gaming_pc_2_on_time` exists in **Developer Tools → States** |

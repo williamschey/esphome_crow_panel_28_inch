@@ -1,6 +1,7 @@
 substitutions:
   name: "countdown_timer_crowpanel"
   friendly_name: "Countdown Timer Crowpanel 2.8inch"
+  timer_entity: "sensor.gaming_pc_2_on_time"
 
 esphome:
   name: ${name}
@@ -88,47 +89,155 @@ touchscreen:
       mirror_x: true
       mirror_y: true
 
+# --- Globals for live interpolation and flash effect ---
+globals:
+  - id: last_hours
+    type: float
+    initial_value: '-1.0'
+  - id: last_update_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: flash_on
+    type: bool
+    initial_value: 'false'
+  - id: current_hours
+    type: float
+    initial_value: '-1.0'
+
 # --- Import timer sensor from Home Assistant ---
 sensor:
   - platform: homeassistant
-    id: gaming_pc_timer
-    entity_id: sensor.gaming_pc_2_on_time
+    id: timer
+    entity_id: ${timer_entity}
     on_value:
       then:
-        # Format decimal hours (e.g. 1.5) as H:MM:SS for display
-        - lvgl.label.update:
-            id: timer_value
-            text: !lambda |-
-              if (std::isnan(x)) return std::string("--:--:--");
-              int total_seconds = (int)(x * 3600.0f);
-              if (total_seconds < 0) total_seconds = 0;
-              int hours = total_seconds / 3600;
-              int minutes = (total_seconds % 3600) / 60;
-              int seconds = total_seconds % 60;
-              char buf[16];
-              snprintf(buf, sizeof(buf), "%d:%02d:%02d", hours, minutes, seconds);
-              return std::string(buf);
-        # Turn text red when over 2 hours, otherwise default color
-        - if:
-            condition:
-              lambda: 'return x > 2.0f;'
-            then:
-              - lvgl.label.update:
-                  id: timer_value
-                  text_color: 0xFF4444
-            else:
-              - lvgl.label.update:
-                  id: timer_value
-                  text_color: 0xE0E0FF
-        # Map 0–2 hours to 0–100% arc, capped at 100%
-        - lvgl.arc.update:
-            id: timer_arc
-            value: !lambda |-
-              if (std::isnan(x)) return 0;
-              int pct = (int)((x / 2.0f) * 100.0f);
-              if (pct < 0) pct = 0;
-              if (pct > 100) pct = 100;
-              return pct;
+        - globals.set:
+            id: last_hours
+            value: !lambda 'return x;'
+        - globals.set:
+            id: last_update_ms
+            value: !lambda 'return millis();'
+
+# --- Update display every 500ms (gives ~1s flash cycle) ---
+interval:
+  - interval: 500ms
+    then:
+      # Toggle flash state
+      - globals.set:
+          id: flash_on
+          value: !lambda 'return !id(flash_on);'
+      # Compute current hours by interpolating from last HA update
+      - globals.set:
+          id: current_hours
+          value: !lambda |-
+            float base = id(last_hours);
+            if (base < 0.0f) return -1.0f;
+            uint32_t elapsed_ms = millis() - id(last_update_ms);
+            return base + (elapsed_ms / 3600000.0f);
+      # Update timer text (H:MM:SS)
+      - lvgl.label.update:
+          id: timer_value
+          text: !lambda |-
+            float h = id(current_hours);
+            if (h < 0.0f) return std::string("--:--:--");
+            int total_seconds = (int)(h * 3600.0f);
+            if (total_seconds < 0) total_seconds = 0;
+            int hours = total_seconds / 3600;
+            int minutes = (total_seconds % 3600) / 60;
+            int seconds = total_seconds % 60;
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%d:%02d:%02d", hours, minutes, seconds);
+            return std::string(buf);
+      # Update arc percentage (0-2h → 0-100%, capped)
+      - lvgl.arc.update:
+          id: timer_arc
+          value: !lambda |-
+            float h = id(current_hours);
+            if (h < 0.0f) return 0;
+            int pct = (int)((h / 2.0f) * 100.0f);
+            if (pct < 0) pct = 0;
+            if (pct > 100) pct = 100;
+            return pct;
+      # --- Color / flash logic ---
+      - if:
+          condition:
+            lambda: 'return id(current_hours) > 2.0f;'
+          then:
+            # Over 2 hours — flash all components red
+            - if:
+                condition:
+                  lambda: 'return id(flash_on);'
+                then:
+                  # Flash ON — bright red
+                  - lvgl.label.update:
+                      id: timer_value
+                      text_color: 0xFF4444
+                  - lvgl.label.update:
+                      id: on_time_label
+                      text_color: 0xFF4444
+                  - lvgl.arc.update:
+                      id: timer_arc
+                      indicator:
+                        arc_color: 0xFF4444
+                else:
+                  # Flash OFF — dim red
+                  - lvgl.label.update:
+                      id: timer_value
+                      text_color: 0x330000
+                  - lvgl.label.update:
+                      id: on_time_label
+                      text_color: 0x330000
+                  - lvgl.arc.update:
+                      id: timer_arc
+                      indicator:
+                        arc_color: 0x330000
+      - if:
+          condition:
+            lambda: 'return id(current_hours) > (2.0f - 10.0f / 60.0f) && id(current_hours) <= 2.0f;'
+          then:
+            # 10 minutes to go — flash all components orange
+            - if:
+                condition:
+                  lambda: 'return id(flash_on);'
+                then:
+                  # Flash ON — bright orange
+                  - lvgl.label.update:
+                      id: timer_value
+                      text_color: 0xFF8C00
+                  - lvgl.label.update:
+                      id: on_time_label
+                      text_color: 0xFF8C00
+                  - lvgl.arc.update:
+                      id: timer_arc
+                      indicator:
+                        arc_color: 0xFF8C00
+                else:
+                  # Flash OFF — dim orange
+                  - lvgl.label.update:
+                      id: timer_value
+                      text_color: 0x332300
+                  - lvgl.label.update:
+                      id: on_time_label
+                      text_color: 0x332300
+                  - lvgl.arc.update:
+                      id: timer_arc
+                      indicator:
+                        arc_color: 0x332300
+      - if:
+          condition:
+            lambda: 'return id(current_hours) >= 0.0f && id(current_hours) <= (2.0f - 10.0f / 60.0f);'
+          then:
+            # Under 1h50m — normal colors
+            - lvgl.label.update:
+                id: timer_value
+                text_color: 0xE0E0FF
+            - lvgl.label.update:
+                id: on_time_label
+                text_color: 0x5555AA
+            - lvgl.arc.update:
+                id: timer_arc
+                indicator:
+                  arc_color: 0x00D4AA
 
 # --- LVGL UI ---
 lvgl:
@@ -174,6 +283,7 @@ lvgl:
 
         # --- "On Time" subtitle ---
         - label:
+            id: on_time_label
             align: CENTER
             y: 30
             text: "On Time"
