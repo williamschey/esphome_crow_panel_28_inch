@@ -165,3 +165,5 @@ lvgl:
             text: "On Time"
             text_color: 0x5555AA
             text_font: montserrat_14
+
+# The current value for sensor.gaming_pc_2_on_time is showing --:--:-- The value of this sensor starts at 0 and has a maximum of 2 hours.  When the value is greater than 2 hours, the value should still be displayed but should be colored red. The HomeAssistant Config for sensor.gaming_pc_2_on_time is that the State class = Measurement, the Unit of measurement = h and the Device class = duration
